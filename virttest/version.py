@@ -13,6 +13,7 @@ __all__ = ("get_git_version", "get_version", "get_top_commit",
            "get_current_branch", "get_pretty_version_info")
 
 import os
+import re
 
 from avocado.utils import process
 
@@ -121,6 +122,12 @@ def get_version(abbrev=4):
             return '%s (RPM install)' % cmd_result.stdout
         except process.CmdError:
             return 'unknown'
+
+        filepath = os.path.realpath(__file__)
+        p = r'^(?:/[^/ ]*?)*/avocado_plugins_vt-(\d+.\d+)[^/ ]*/(?:[^/ ]*)*'
+        match = re.match(p, filepath)
+        if match:
+            return match.group(1)
 
     if version != release_version:
         _write_release_version(version)
