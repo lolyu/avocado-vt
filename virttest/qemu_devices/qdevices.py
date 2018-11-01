@@ -8,8 +8,10 @@ interact with qemu qdev structure.
 """
 import logging
 import re
+import sys
 import traceback
 from collections import OrderedDict
+from functools import total_ordering
 
 from virttest import qemu_monitor
 from virttest import utils_misc
@@ -875,6 +877,117 @@ class QObject(QCustomDevice):
     # pylint: disable=E0202
     def verify_hotplug(self, out, monitor):
         raise DeviceError("'verify_hotplug' function unimplemented")
+
+
+# iothread support
+@total_ordering
+class IOThread(QObject):
+    """
+    iothread representation.
+
+    legit attributes of iothread
+    "id", "poll-max-ns", "poll-grow", "poll-shrink"]
+    """
+
+    id = 0
+
+    def __init__(self, id=None, params=None):
+        """Constructor."""
+        if id is None:
+            id = self._get_next_id()
+        if params is None:
+            params = dict()
+        params["id"] = id
+        self.id = id
+        self.__attached_devices = list()
+        kwargs = dict(backend="iothread", params=params)
+        super(IOThread, self).__init__(**kwargs)
+
+    def __len__(self):
+        """Get count of attached devices."""
+        return len(self.__attached_devices)
+
+    def __eq__(self, other):
+        """Equal."""
+        if isinstance(other, str):
+            return self.id == other
+        return (len(self), self.id) == (len(other), other.id)
+
+    def __lt__(self, other):
+        """Less than."""
+        return (len(self), self.id) < (len(self), self.id)
+
+    def _get_next_id(self):
+        """Get next usable id."""
+        id = "iothread%d" % IOThread.id
+        IOThread.id += 1
+        return id
+
+    @staticmethod
+    def query(monitor):
+        """Get a dictionary of info iothreads."""
+        out = monitor.info("iothreads", debug=False)
+        if isinstance(monitor, qemu_monitor.HumanMonitor):
+            pattern = ("([\w-]+):\s+(thread_id)=(\d+)\s+(poll-max-ns)=(\d+)\s+"
+                       "(poll-grow)=(\d+)\s+(poll-shrink)=(\d+)")
+            result = []
+            for t in re.findall(pattern, out):
+                it_dict = {}
+                it_dict["id"] = t[0]
+                it_dict.update(zip(t[1::2], t[2::2]))
+                result.append(it_dict)
+            return result
+        return out
+
+    def get_children(self):
+        """Get child devices, skip QObject."""
+        return super(QObject, self).get_children()
+
+    def hotplug_qmp(self):
+        """Return hotplug qmp command string."""
+        params = dict(self.params)
+        backend = params.pop("backend")
+        id = params.pop("id")
+        kwargs = {"qom-type": backend, "id": id, "props": params}
+        return "object-add", kwargs
+
+    def verify_hotplug(self, out, monitor):
+        """Verify if it is plugged into VM."""
+        out = IOThread.query(monitor)
+        for iothread in out:
+            if self.id == iothread["id"]:
+                return True
+        return False
+
+    def verify_unplug(self, out, monitor):
+        """Verify if it is unplugged from VM."""
+        return not self.verify_hotplug(out, monitor)
+
+    def is_attached(self, device):
+        """Check if device is using this iothread."""
+        return device in self.__attached_devices
+
+    def unplug_hook(self):
+        """Remove from attached devices' params."""
+        for dev in self.__attached_devices:
+            dev.set_param("iothread", None)
+
+    def unplug_unhook(self):
+        """Reset attached devices' params."""
+        for dev in self.__attached_devices:
+            dev.set_param("iothread", self.id)
+
+    def attach(self, device):
+        """Attach device to this iothread."""
+        if self.is_attached(device):
+            return
+        self.__attached_devices.append(device)
+        device.set_param("iothread", self.id)
+
+    def detach(self, device):
+        """Detach device from this iothread."""
+        self.__attached_devices.remove(device)
+        device.set_param("iothread", None)
 
 
 class Memory(QObject):

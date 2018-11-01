@@ -5,7 +5,7 @@ Shared classes and functions (exceptions, ...)
 """
 
 import six
-
+import heapq
 
 #
 # Exceptions
@@ -73,3 +73,38 @@ def none_or_int(value):
         return int(value)
     else:
         raise TypeError("This parameter has to be int or none")
+
+
+def _parse_extra_params(extra_params):
+    """Transform param into dictionary."""
+    return dict(_.split("=", 1) for _ in extra_params.split(",") if _)
+
+
+class MinQueue(object):
+    def __init__(self, item_list):
+        self._queue = list(item_list)
+        heapq.heapify(self._queue)
+
+    def __iter__(self):
+        return iter(self._queue)
+
+    def __getitem__(self, pos):
+        return self._queue[pos]
+
+    def __setitem__(self, pos, value):
+        self._queue[pos] = value
+
+    def siftup(self, pos):
+        heapq._siftup(self._queue, pos)
+
+    def siftdown(self, pos, startpos=0):
+        heapq._siftdown(self._queue, startpos, pos)
+
+    def push(self, item):
+        heapq.heappush(self._queue, item)
+
+    def pop(self):
+        return heapq.heappop(self._queue)
+
+    def get_min(self):
+        return self._queue[0]
