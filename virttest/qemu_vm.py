@@ -4655,3 +4655,24 @@ class VM(virt_vm.BaseVM):
     def system_reset(self):
         """ Send system_reset to monitor"""
         return self.monitor.system_reset()
+
+    def dump_guest_memory(self, filename, paging=False, detach=False,
+                              begin=None, length=None, compressed=False,
+                              compression_format=None):
+        """
+        Dump guest memory.
+
+        :param filename: memory dump filename.
+        :param  paging: True to do paging to get guest's memory mapping.
+        :param detach: True to return immediately.
+        :param begin: the starting physical address.
+        :param length: the memory size, in bytes.
+        :param compressed: True to dump in kdump-compressed format, False to
+            use default format "elf".
+        :param compression_format: compression format: including "kdump-zlib",
+            "kdump-lzo" and "kdump-snappy".
+        :return: output of 'dump-guest-memory'
+        """
+        return self.monitor.dump_guest_memory(filename, paging, detach,
+                                              begin, length, compressed,
+                                              compression_format)

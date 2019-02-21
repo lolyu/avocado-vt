@@ -1467,6 +1467,8 @@ def _take_screendumps(test, params, env):
     inactivity_treshold = float(params.get("inactivity_treshold", 1800))
     inactivity_watcher = params.get("inactivity_watcher", "log")
 
+    dump_guest_memory = params.get("dump_guest_memory_on_screen_inactivity",
+                                   "no") == "yes"
     cache = {}
     counter = {}
     inactivity = {}
@@ -1524,6 +1526,14 @@ def _take_screendumps(test, params, env):
                             test.background_errors.put(sys.exc_info())
                     elif inactivity_watcher == 'log':
                         logging.debug(msg)
+                    if dump_guest_memory:
+                        filename = "memory_dump_%s_%s" % (vm.name, vm.pid)
+                        filename = os.path.join(test.debugdir, filename)
+                        if hasattr(vm, "dump_guest_memory"):
+                            logging.debug("dump %s memory to %s",
+                                          vm.name, filename)
+                            vm.dump_guest_memory(filename)
+                        dump_guest_memory = False
             else:
                 inactivity[vm.instance] = time.time()
             cache[image_hash] = screendump_filename

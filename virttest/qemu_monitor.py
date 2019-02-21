@@ -1420,6 +1420,40 @@ class HumanMonitor(Monitor):
         self.verify_supported_cmd(cmd)
         return self.cmd(cmd)
 
+    def dump_guest_memory(self, filename, paging=False, detach=False,
+                          begin=None, length=None, compressed=False,
+                          compression_format=None):
+        """
+        Dump guest memory.
+
+        :param filename: memory dump filename.
+        :param  paging: True to do paging to get guest's memory mapping.
+        :param detach: True to return immediately.
+        :param begin: the starting physical address.
+        :param length: the memory size, in bytes.
+        :param compressed: True to dump in kdump-compressed format, False to
+            use default format "elf".
+        :param compression_format: compression format: including "kdump-zlib",
+            "kdump-lzo" and "kdump-snappy".
+        :return: output of 'dump-guest-memory'
+        """
+        cmd = ["dump-guest-memory"]
+        self.verify_supported_cmd(cmd[-1])
+        if paging:
+            cmd.append("-p")
+        if detach:
+            cmd.append("-d")
+        if compressed:
+            compression_mapping = {"kdump-zlib": "-z", "kdump-lzo": "-l",
+                                   "kdump-snappy": "-s"}
+            cmd.append(compression_mapping[compression_format])
+        cmd.append(filename)
+        if begin is not None:
+            cmd.append(str(begin))
+        if length is not None:
+            cmd.append(str(length))
+        return self.cmd(' '.join(cmd))
+
 
 class QMPMonitor(Monitor):
 
@@ -2778,4 +2812,41 @@ class QMPMonitor(Monitor):
                     "type": "qcode",
                     "data": key
                 }}}]}
+        return self.cmd(cmd, args)
+
+    def dump_guest_memory(self, filename, paging=False, detach=False,
+                          begin=None, length=None, compressed=False,
+                          compression_format=None):
+        """
+        Dump guest memory.
+        https://github.com/coreos/qemu/blob/master/qmp-commands.hx
+
+        :param filename: memory dump filename or file descriptor.
+        :param paging: True to do paging to get guest's memory mapping.
+        :param detach: True to return immediately.
+        :param begin: the starting physical address.
+        :param length: the memory size, in bytes.
+        :param compressed: True to dump in kdump-compressed format, False to
+            use default format "elf".
+        :param compression_format: compression format: including "kdump-zlib",
+            "kdump-lzo" and "kdump-snappy".
+        :return: output of 'dump-guest-memory'
+        """
+        cmd = "dump-guest-memory"
+        self.verify_supported_cmd(cmd)
+        args = {}
+        if filename.isdigit():
+            args["protocol"] = "fd:%s" % filename
+        else:
+            args["protocol"] = "file:%s" % filename
+        if paging:
+            args["paging"] = True
+        if detach:
+            args["detach"] = True
+        if compressed:
+            args["format"] = compression_format
+        if begin is not None:
+            args["begin"] = begin
+        if length is not None:
+            args["length"] = length
         return self.cmd(cmd, args)
