@@ -22,10 +22,7 @@ import os
 import sys
 import pickle
 import pipes
-try:
-    import queue as Queue
-except ImportError:
-    import Queue
+import traceback
 
 from avocado.core import exceptions
 from avocado.core import test
@@ -33,6 +30,7 @@ from avocado.utils import stacktrace
 from avocado.utils import process
 
 from virttest import asset
+from virttest import bg_error_queue
 from virttest import bootstrap
 from virttest import data_dir
 from virttest import env_process
@@ -106,7 +104,7 @@ class VirtTest(test.Test):
         self.iteration = 0
         self.resultsdir = None
         self.file_handler = None
-        self.background_errors = Queue.Queue()
+        self.background_errors = bg_error_queue.background_errors
         super(VirtTest, self).__init__(methodName=methodName, name=name,
                                        params=params,
                                        base_logdir=base_logdir, job=job,
@@ -208,15 +206,23 @@ class VirtTest(test.Test):
     def verify_background_errors(self):
         """
         Verify if there are any errors that happened on background threads.
+        Logs all errors in the background queue and raise the first error.
 
-        :raise Exception: Any exception stored on the background_errors queue.
+
+        :raise Exception: First exception stored on the background_errors
+            queue.
         """
-        try:
-            exc = self.background_errors.get(block=False)
-        except Queue.Empty:
-            pass
-        else:
-            six.reraise(*exc)
+        bg_errors = list(self.background_errors.queue)
+        error_to_raise = None
+        for index, error in enumerate(bg_errors, 1):
+            if index == 1:
+                error_to_raise = error
+            logging.error("error #%d received from background:", index)
+            logging.error("".join(traceback.format_exception(*error)))
+        if self.params.get("reserve_background_errors", "no") == "no":
+            bg_error_queue.clear_bg_errors()
+        if error_to_raise is not None:
+            six.reraise(*error_to_raise)
 
     def __safe_env_save(self, env):
         """
