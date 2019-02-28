@@ -13,6 +13,7 @@ import struct
 import re
 import random
 import errno
+import sys
 
 from functools import partial
 
@@ -25,6 +26,7 @@ from avocado.utils import linux_modules
 import six
 from six.moves import xrange
 
+from virttest import bg_error_queue
 from virttest import utils_misc
 from virttest import virt_vm
 from virttest import test_setup
@@ -91,6 +93,18 @@ def clean_tmp_files():
 
 CREATE_LOCK_FILENAME = os.path.join(data_dir.get_tmp_dir(),
                                     'avocado-vt-vm-create.lock')
+
+
+def qemu_process_term_watcher(vm, exit_status):
+    """
+    Callback function to detect non-zero exit status and push error to bg
+    error queue.
+    """
+    if exit_status != 0:
+        try:
+            raise virt_vm.VMExitStatusError(vm.name, exit_status)
+        except virt_vm.VMExitStatusError:
+            bg_error_queue.background_errors.put(sys.exc_info())
 
 
 class VM(virt_vm.BaseVM):
@@ -2917,12 +2931,12 @@ class VM(virt_vm.BaseVM):
                 logging.info("Running qemu command (reformatted):\n%s",
                              qemu_command.replace(" -", " \\\n    -"))
                 self.qemu_command = qemu_command
-                self.process = aexpect.run_tail(qemu_command,
-                                                None,
-                                                logging.info,
-                                                "[qemu output] ",
-                                                auto_close=False,
-                                                pass_fds=pass_fds)
+                self.process = aexpect.run_tail(
+                    qemu_command,
+                    partial(qemu_process_term_watcher, self.name),
+                    logging.info, "[qemu output] ",
+                    auto_close=False, pass_fds=pass_fds
+                    )
 
             logging.info("Created qemu process with parent PID %d",
                          self.process.get_pid())
